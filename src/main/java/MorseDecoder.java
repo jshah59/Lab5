@@ -48,22 +48,47 @@ public class MorseDecoder {
         /*
          * We should check the results of getNumFrames to ensure that they are safe to cast to int.
          */
+
+        /*
+        if (!(inputFile.getNumFrames() > -2_147_483_648
+                && inputFile.getNumFrames() < 2_147_483_647)) {
+            System.out.println("Too many frames!");
+            return null;
+        }   */
+
         int totalBinCount = (int) Math.ceil(inputFile.getNumFrames() / BIN_SIZE);
         double[] returnBuffer = new double[totalBinCount];
 
         double[] sampleBuffer = new double[BIN_SIZE * inputFile.getNumChannels()];
+
         for (int binIndex = 0; binIndex < totalBinCount; binIndex++) {
+
+            int framesRead = inputFile.readFrames(sampleBuffer, BIN_SIZE);
+
+            returnBuffer[binIndex] = 0;
+
+            for (int i = 0; i < sampleBuffer.length; i++) {
+                returnBuffer[binIndex] += Math.abs(sampleBuffer[i]);
+            }
+
+            if (framesRead < BIN_SIZE && !(binIndex == totalBinCount - 1)) {
+                throw new RuntimeException("short read from WAV file");
+            }
+
+            //System.out.println(returnBuffer[binIndex]);
             // Get the right number of samples from the inputFile
             // Sum all the samples together and store them in the returnBuffer
         }
+
+
         return returnBuffer;
     }
 
     /** Power threshold for power or no power. You may need to modify this value. */
-    private static final double POWER_THRESHOLD = 10;
+    private static final double POWER_THRESHOLD = 0.4;
 
     /** Bin threshold for dots or dashes. Related to BIN_SIZE. You may need to modify this value. */
-    private static final int DASH_BIN_COUNT = 8;
+    private static final int DASH_BIN_COUNT = 12;
 
     /**
      * Convert power measurements to dots, dashes, and spaces.
@@ -81,13 +106,58 @@ public class MorseDecoder {
          * There are four conditions to handle. Symbols should only be output when you see
          * transitions. You will also have to store how much power or silence you have seen.
          */
+        boolean isPower = false;
+        boolean wasPower = false;
+        boolean isSilence = false;
+        boolean wasSilence = false;
+
+        int powerDuration = 0;
+        int silenceDuration = 0;
+
+        String returnString = "";
+
+        for (int powerIndex = 0; powerIndex < powerMeasurements.length; powerIndex++) {
+            isPower = (powerMeasurements[powerIndex] >= POWER_THRESHOLD);
+            isSilence = (powerMeasurements[powerIndex] < POWER_THRESHOLD);
+            if (powerIndex > 0) {
+                wasPower = (powerMeasurements[powerIndex - 1] >= POWER_THRESHOLD);
+                wasSilence = (powerMeasurements[powerIndex - 1] < POWER_THRESHOLD);
+            }
+
+            if (isPower) {
+                powerDuration++;
+            }
+
+            if (isSilence) {
+                silenceDuration++;
+            }
+
+            if (isSilence && wasPower) {
+                if (powerDuration > DASH_BIN_COUNT) {
+                    returnString += "-";
+                } else {
+                    returnString += ".";
+                }
+                powerDuration = 0;
+            }
+
+            if (wasSilence && isPower) {
+                if (silenceDuration >= DASH_BIN_COUNT) {
+                    returnString += " ";
+                }
+                silenceDuration = 0;
+            }
+
+        }
+
+        //System.out.println(returnString);
 
         // if ispower and waspower
         // else if ispower and not waspower
         // else if issilence and wassilence
         // else if issilence and not wassilence
 
-        return "";
+        return returnString;
     }
 
     /**
